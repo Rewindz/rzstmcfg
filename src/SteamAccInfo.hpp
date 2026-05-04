@@ -6,8 +6,12 @@
 #include <fstream>
 #include <vector>
 #include <charconv>
+#include <iostream>
+#include <format>
 
 #include <ValveFileVDF/vdf_parser.hpp>
+
+#include "Games.hpp"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -66,6 +70,12 @@ public:
         return res;
     }
 
+    bool hasGameDataDir(const GameNames& game)
+    {
+        auto gameDataPath = userdataPath / GAME_IDS.at(game).id;
+        return (std::filesystem::exists(gameDataPath) && std::filesystem::is_directory(gameDataPath));
+    }
+
     std::string id64, id3, uname;
     std::filesystem::path userdataPath;     
 
@@ -83,6 +93,9 @@ private:
         if(!steamPath)
             abort();
         userdataPath = steamPath.value() / "userdata" / id3;
+
+        if(!std::filesystem::exists(userdataPath) || !std::filesystem::is_directory(userdataPath))
+            std::cerr << std::format("Userdata path for user: {}, does not exist or isn't a directory!\n", uname);
 
     }
 
