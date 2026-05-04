@@ -8,6 +8,7 @@
 #include <charconv>
 #include <iostream>
 #include <format>
+#include <algorithm>
 
 #include <ValveFileVDF/vdf_parser.hpp>
 
@@ -20,7 +21,7 @@
 
 constexpr uint64_t STEAM_MAGIC_NUMBER = 76561197960265728;
 
-std::optional<std::filesystem::path> getSteamPath()
+inline std::optional<std::filesystem::path> getSteamPath()
 {
     static std::optional<std::filesystem::path> path = []() -> std::optional<std::filesystem::path> {
         #ifdef __linux__
@@ -41,6 +42,20 @@ std::optional<std::filesystem::path> getSteamPath()
         #endif
     }();
     return path;
+}
+
+inline std::string id3to64(const std::string& id3)
+{
+    uint64_t tmp = 0;
+    std::from_chars(id3.data(), id3.data() + id3.size(), tmp);
+    return std::to_string(tmp + STEAM_MAGIC_NUMBER);
+}
+
+inline std::string id64to3(const std::string& id64)
+{
+    uint64_t tmp = 0;
+    std::from_chars(id64.data(), id64.data() + id64.size(), tmp);
+    return std::to_string(tmp - STEAM_MAGIC_NUMBER);   
 }
 
 
@@ -67,6 +82,20 @@ public:
                 res.push_back(SteamAccInfo(id64, child->attribs["PersonaName"]));
             }
         } 
+
+        auto userdataPath = steamPath.value() / "userdata";
+        for(const auto &dir : std::filesystem::directory_iterator(userdataPath)){
+            if(dir.is_directory()){
+                auto id3 = dir.path().filename().string();
+                auto id64 = id3to64(id3);
+                if(!std::any_of(res.begin(), res.end(), [&id64](const SteamAccInfo& acc){
+                    return id64 == acc.id64;
+                })){
+                    res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id64.substr(id64.length()))));
+                }
+            }
+        }
+
         return res;
     }
 
@@ -85,9 +114,7 @@ private:
     SteamAccInfo(const std::string &_id64, const std::string &_uname)
         : id64(_id64), uname(_uname)
     {
-        uint64_t tmp = 0;
-        auto [ptr, ec] = std::from_chars(id64.data(), id64.data() + id64.size(), tmp);
-        id3 = std::to_string(tmp - STEAM_MAGIC_NUMBER);
+        id3 = id64to3(id64);
 
         auto steamPath = getSteamPath();
         if(!steamPath)
