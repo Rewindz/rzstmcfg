@@ -30,7 +30,7 @@ set(IMGUI_SOURCES
 
 add_library(libimgui STATIC)
 target_sources(libimgui PRIVATE ${IMGUI_SOURCES})
-target_include_directories(libimgui PUBLIC ${imgui_SOURCE_DIR})
+target_include_directories(libimgui PUBLIC ${imgui_SOURCE_DIR} ${glfw_SOURCE_DIR}/include)
 
 
 add_executable(rzstmcfg)
