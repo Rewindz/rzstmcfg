@@ -10,6 +10,12 @@
 
 #include "SteamAccInfo.hpp"
 #include "Games.hpp"
+#include "Borrower.hpp"
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 struct WindowStatus
 {
@@ -47,6 +53,7 @@ int main(void)
     ImGui_ImplOpenGL3_Init();
 
     auto steamAccs = SteamAccInfo::GetAllAccounts();
+    auto& borrower = Borrower::GetBorrower();
 
     WindowStatus status;
     const auto& gameInfos = getAllGameInfos();
@@ -147,6 +154,16 @@ int main(void)
             ImGui::EndTable();
         }
 
+        if(ImGui::Button("Return")){
+
+        }
+
+        ImGui::SameLine();
+
+        if(ImGui::Button("Borrow")){
+
+        }
+
         ImGui::End();
 
         ImGui::Render();
@@ -171,3 +188,15 @@ int main(void)
     glfwTerminate();
     return 0;
 }
+
+#ifdef _WIN32
+int WinMain(
+  HINSTANCE hInstance,
+  HINSTANCE hPrevInstance,
+  LPSTR     lpCmdLine,
+  int       nShowCmd
+)
+{
+    return main();
+}
+#endif

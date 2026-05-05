@@ -7,14 +7,18 @@ include(FetchContent)
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG v1.92.7
-    GIT_SHALLOW ON
+    GIT_SHALLOW TRUE
 )
 
 FetchContent_Declare(glfw
     URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip
 )
 
-FetchContent_MakeAvailable(imgui glfw)
+FetchContent_Declare(json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/include.zip
+)
+
+FetchContent_MakeAvailable(imgui glfw json)
 
 find_package(OpenGL REQUIRED)
 
@@ -33,7 +37,7 @@ target_sources(libimgui PRIVATE ${IMGUI_SOURCES})
 target_include_directories(libimgui PUBLIC ${imgui_SOURCE_DIR} ${glfw_SOURCE_DIR}/include)
 
 
-add_executable(rzstmcfg)
+add_executable(rzstmcfg WIN32)
 target_compile_features(rzstmcfg PRIVATE cxx_std_23)
 target_link_libraries(rzstmcfg PRIVATE
  libimgui
@@ -45,4 +49,5 @@ target_sources(rzstmcfg PRIVATE
 )
 target_include_directories(rzstmcfg PRIVATE
     libs
+    ${json_SOURCE_DIR}/single_include
 )

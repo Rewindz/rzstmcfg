@@ -91,7 +91,7 @@ public:
                 if(!std::any_of(res.begin(), res.end(), [&id64](const SteamAccInfo& acc){
                     return id64 == acc.id64;
                 })){
-                    res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id64.substr(id64.length()))));
+                    res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id64.substr(id64.length() - 4))));
                 }
             }
         }
