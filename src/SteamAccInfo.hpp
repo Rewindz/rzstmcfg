@@ -99,9 +99,9 @@ public:
         return res;
     }
 
-    bool hasGameDataDir(const GameNames& game)
+    bool hasGameDataDir(const std::string& gameId) const
     {
-        auto gameDataPath = userdataPath / GAME_IDS.at(game).id;
+        auto gameDataPath = userdataPath / gameId;
         return (std::filesystem::exists(gameDataPath) && std::filesystem::is_directory(gameDataPath));
     }
 
