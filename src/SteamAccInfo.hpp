@@ -91,6 +91,7 @@ public:
                 if(!std::any_of(res.begin(), res.end(), [&id64](const SteamAccInfo& acc){
                     return id64 == acc.id64;
                 })){
+                    // Probably webscrape for the username when it is unknown (unfortunate, but the API is too much work for this)
                     res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id64.substr(id64.length() - 4))));
                 }
             }

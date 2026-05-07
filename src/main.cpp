@@ -22,6 +22,7 @@ struct WindowStatus
     int currentGameIdx = 0;
     const SteamAccInfo *selectedFromAcc = nullptr;
     const SteamAccInfo *selectedToAcc = nullptr;
+    BorrowStatus lastBorrowStatus = BORROW_OK;
 };
 
 
@@ -98,7 +99,7 @@ int main(void)
         ImGui::SetNextWindowPos(viewport->Pos);
         ImGui::SetNextWindowSize(viewport->Size);
         
-        ImGui::Begin("A", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        ImGui::Begin("rzstmcfg", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
         
         if(ImGui::BeginCombo("##GameCombo", getGameNameCStr(gameInfos[status.currentGameIdx]), ImGuiComboFlags_HeightLarge))
         {
@@ -161,7 +162,43 @@ int main(void)
         ImGui::SameLine();
 
         if(ImGui::Button("Borrow")){
+            if(status.selectedFromAcc != nullptr && status.selectedToAcc != nullptr){
+                status.lastBorrowStatus = borrower.borrow(gameInfos[status.currentGameIdx].get().id, 
+                    *status.selectedToAcc, *status.selectedFromAcc);
+            }
+            else {
+                status.lastBorrowStatus = BORROW_NOGAME;
+            }
+            ImGui::OpenPopup("BorrowPopup");
+        }
 
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        if(ImGui::BeginPopupModal("BorrowPopup", nullptr, 
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+        {
+            std::string statusText;
+            switch(status.lastBorrowStatus){
+                case BORROW_OK:
+                    statusText = "Borrow Succeeded!";
+                    break;
+                case BORROW_FAIL:
+                    statusText = "Borrow Failed!";
+                    break;
+                case BORROW_NOGAME:
+                    statusText = "Cannot borrow! Both users do not have the settings for this game!";
+                    break;
+                case BORROW_ALR_EXISTS:
+                    statusText = "Cannot borrow! A borrow like this already exists! Did you mean to return?";
+                    break;
+                default:
+                    statusText = "How are you seeing this?";
+                    break;
+            }
+            ImGui::Text("%s", statusText.c_str());
+            if(ImGui::Button("Close##BorrowPopup")){
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
 
         ImGui::End();
