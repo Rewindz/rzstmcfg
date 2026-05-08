@@ -35,7 +35,7 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    auto window = glfwCreateWindow(800, 600, "rzstmcfg", nullptr, nullptr);
+    auto window = glfwCreateWindow(1024, 768, "rzstmcfg", nullptr, nullptr);
     if(!window)
         return 1;
 
