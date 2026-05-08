@@ -23,6 +23,7 @@ struct WindowStatus
     const SteamAccInfo *selectedFromAcc = nullptr;
     const SteamAccInfo *selectedToAcc = nullptr;
     BorrowStatus lastBorrowStatus = BORROW_OK;
+    ReturnStatus lastReturnStatus = RETURN_OK;
 };
 
 
@@ -53,7 +54,7 @@ int main(void)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init();
 
-    auto steamAccs = SteamAccInfo::GetAllAccounts();
+    auto& steamAccs = SteamAccInfo::GetAllAccounts();
     auto& borrower = Borrower::GetBorrower();
 
     WindowStatus status;
@@ -101,105 +102,163 @@ int main(void)
         
         ImGui::Begin("rzstmcfg", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
         
-        if(ImGui::BeginCombo("##GameCombo", getGameNameCStr(gameInfos[status.currentGameIdx]), ImGuiComboFlags_HeightLarge))
+        if(ImGui::BeginTabBar("MainTabs"))
         {
-            int n = 0;
-            for(auto gameinfo : gameInfos)
+            if(ImGui::BeginTabItem("Create Borrow"))
             {
-                const bool selected = status.currentGameIdx == n;
-                if(ImGui::Selectable(getGameNameCStr(gameinfo), selected)){
-                    status.selectedToAcc = status.selectedFromAcc = nullptr;
-                    status.currentGameIdx = n;
+                if(ImGui::BeginCombo("##GameCombo", getGameNameCStr(gameInfos[status.currentGameIdx]), ImGuiComboFlags_HeightLarge))
+                {
+                    int n = 0;
+                    for(auto gameinfo : gameInfos)
+                    {
+                        const bool selected = status.currentGameIdx == n;
+                        if(ImGui::Selectable(getGameNameCStr(gameinfo), selected)){
+                            status.selectedToAcc = status.selectedFromAcc = nullptr;
+                            status.currentGameIdx = n;
+                        }
+
+                        if(selected)
+                            ImGui::SetItemDefaultFocus();
+                        n++;
+                    }
+                    ImGui::EndCombo();
                 }
 
-                if(selected)
-                    ImGui::SetItemDefaultFocus();
-                n++;
-            }
-            ImGui::EndCombo();
-        }
-
-        if(ImGui::BeginTable("From Account Table", 1, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
-        {
-            ImGui::TableSetupColumn("From Account");
-            ImGui::TableHeadersRow();
-            for(const auto& acc : steamAccs | std::views::filter(gameDirFilter))
-            {
-                ImGui::TableNextColumn();
-                const bool selected = status.selectedFromAcc == &acc;
-                auto lbl = std::format("{}##{}", acc.uname, acc.id64);
-                if(ImGui::Selectable(lbl.c_str(), selected)){
-                    status.selectedFromAcc = selected ? nullptr : &acc;
-                    status.selectedToAcc = nullptr;
+                if(ImGui::BeginTable("From Account Table", 1, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
+                {
+                    ImGui::TableSetupColumn("From Account");
+                    ImGui::TableHeadersRow();
+                    for(const auto& acc : steamAccs | std::views::filter(gameDirFilter))
+                    {
+                        ImGui::TableNextColumn();
+                        const bool selected = status.selectedFromAcc == &acc;
+                        auto lbl = std::format("{}##{}", acc.uname, acc.id64);
+                        if(ImGui::Selectable(lbl.c_str(), selected)){
+                            status.selectedFromAcc = selected ? nullptr : &acc;
+                            status.selectedToAcc = nullptr;
+                        }
+                    }
+                    ImGui::EndTable();
                 }
-            }
-            ImGui::EndTable();
-        }
 
-        drawDownArrow();
-        
-        if(ImGui::BeginTable("To Account Table", 1, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
-        {
-            ImGui::TableSetupColumn("To Account");
-            ImGui::TableHeadersRow();
+                drawDownArrow();
+                
+                if(ImGui::BeginTable("To Account Table", 1, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
+                {
+                    ImGui::TableSetupColumn("To Account");
+                    ImGui::TableHeadersRow();
 
-            for(const auto& acc : steamAccs | std::views::filter(gameDirFilter) | std::views::filter(selectedToFilter))
-            {
-                ImGui::TableNextColumn();
-                const bool selected = status.selectedToAcc == &acc;
-                auto lbl = std::format("{}##{}", acc.uname, acc.id64);
-                if(ImGui::Selectable(lbl.c_str(), selected)){
-                    status.selectedToAcc = selected ? nullptr : &acc;
+                    for(const auto& acc : steamAccs | std::views::filter(gameDirFilter) | std::views::filter(selectedToFilter))
+                    {
+                        ImGui::TableNextColumn();
+                        const bool selected = status.selectedToAcc == &acc;
+                        auto lbl = std::format("{}##{}", acc.uname, acc.id64);
+                        if(ImGui::Selectable(lbl.c_str(), selected)){
+                            status.selectedToAcc = selected ? nullptr : &acc;
+                        }
+                    }
+                    ImGui::EndTable();
                 }
+
+                if(ImGui::Button("Borrow")){
+                    if(status.selectedFromAcc != nullptr && status.selectedToAcc != nullptr){
+                        status.lastBorrowStatus = borrower.borrow(gameInfos[status.currentGameIdx].get().id, 
+                            *status.selectedToAcc, *status.selectedFromAcc);
+                    }
+                    else {
+                        status.lastBorrowStatus = BORROW_NOGAME;
+                    }
+                    ImGui::OpenPopup("BorrowPopup");
+                }
+
+                ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+                if(ImGui::BeginPopupModal("BorrowPopup", nullptr, 
+                    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+                {
+                    std::string statusText;
+                    switch(status.lastBorrowStatus){
+                        case BORROW_OK:
+                            statusText = "Borrow Succeeded!";
+                            break;
+                        case BORROW_FAIL:
+                            statusText = "Borrow Failed!";
+                            break;
+                        case BORROW_NOGAME:
+                            statusText = "Cannot borrow! Both users do not have the settings for this game!";
+                            break;
+                        case BORROW_ALR_EXISTS:
+                            statusText = "Cannot borrow! A borrow like this already exists! Did you mean to return?";
+                            break;
+                        default:
+                            statusText = "How are you seeing this?";
+                            break;
+                    }
+                    ImGui::Text("%s", statusText.c_str());
+                    if(ImGui::Button("Close##BorrowPopup")){
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
+                }
+
+                ImGui::EndTabItem();
             }
-            ImGui::EndTable();
+
+            if(ImGui::BeginTabItem("Active Borrows"))
+            {
+                auto getAccName = [&steamAccs](const std::string& id64) -> std::string {
+                    auto it = std::find_if(steamAccs.begin(), steamAccs.end(), [&id64](const SteamAccInfo& acc){ return acc.id64 == id64; });
+                    return it != steamAccs.end() ? it->uname : id64.substr(id64.length() - 4);
+                };
+
+                if(ImGui::BeginTable("BorrowsTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY))
+                {
+                    ImGui::TableSetupColumn("Game");
+                    ImGui::TableSetupColumn("Accounts");
+                    ImGui::TableSetupColumn("Action");
+                    ImGui::TableHeadersRow();
+
+                    bool openPopup = false;
+
+                    for(const auto& b : borrower.getBorrows())
+                    {
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%s", FindGameNameFromId(b.gameId).c_str());
+                        
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%s -> %s", getAccName(b.borrowee).c_str(), getAccName(b.borrower).c_str());
+                        
+                        ImGui::TableNextColumn();
+                        ImGui::PushID(b.borrowId.c_str());
+                        if(ImGui::Button("Return"))
+                        {
+                            status.lastReturnStatus = borrower.returnBorrow(b);
+                            openPopup = true;
+                        }
+                        ImGui::PopID();
+                    }
+
+                    if(openPopup)
+                        ImGui::OpenPopup("ReturnPopup");
+
+                    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+                    if(ImGui::BeginPopupModal("ReturnPopup", nullptr, 
+                        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+                    {
+                        std::string statusText = (status.lastReturnStatus == RETURN_OK) ? "Return Succeeded!" : "Return Failed!";
+                        ImGui::Text("%s", statusText.c_str());
+                        if(ImGui::Button("Close##ReturnPopup")){
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::EndPopup();
+                    }
+
+                    ImGui::EndTable();
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
 
-        if(ImGui::Button("Return")){
-
-        }
-
-        ImGui::SameLine();
-
-        if(ImGui::Button("Borrow")){
-            if(status.selectedFromAcc != nullptr && status.selectedToAcc != nullptr){
-                status.lastBorrowStatus = borrower.borrow(gameInfos[status.currentGameIdx].get().id, 
-                    *status.selectedToAcc, *status.selectedFromAcc);
-            }
-            else {
-                status.lastBorrowStatus = BORROW_NOGAME;
-            }
-            ImGui::OpenPopup("BorrowPopup");
-        }
-
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if(ImGui::BeginPopupModal("BorrowPopup", nullptr, 
-            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
-        {
-            std::string statusText;
-            switch(status.lastBorrowStatus){
-                case BORROW_OK:
-                    statusText = "Borrow Succeeded!";
-                    break;
-                case BORROW_FAIL:
-                    statusText = "Borrow Failed!";
-                    break;
-                case BORROW_NOGAME:
-                    statusText = "Cannot borrow! Both users do not have the settings for this game!";
-                    break;
-                case BORROW_ALR_EXISTS:
-                    statusText = "Cannot borrow! A borrow like this already exists! Did you mean to return?";
-                    break;
-                default:
-                    statusText = "How are you seeing this?";
-                    break;
-            }
-            ImGui::Text("%s", statusText.c_str());
-            if(ImGui::Button("Close##BorrowPopup")){
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
 
         ImGui::End();
 

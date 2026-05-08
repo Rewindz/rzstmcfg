@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <algorithm>
 
 enum class GameNames
 {
@@ -25,6 +26,15 @@ inline const std::map<GameNames, GameInfo> GAME_IDS =
 };
 
 using GameInfoList = std::vector<std::reference_wrapper<const GameInfo>>;
+
+inline std::string FindGameNameFromId(const std::string& gameId)
+{
+    for(const auto& [gamename, info] : GAME_IDS){
+        if(info.id == gameId)
+            return info.name;
+    }
+    return "Unknown";
+}
 
 inline const GameInfoList& getAllGameInfos()
 {

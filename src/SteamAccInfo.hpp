@@ -64,9 +64,13 @@ class SteamAccInfo
 {
 public:
 
-    static std::vector<SteamAccInfo> GetAllAccounts()
+    static std::vector<SteamAccInfo>& GetAllAccounts()
     {
-        std::vector<SteamAccInfo> res;
+        static std::vector<SteamAccInfo> res;
+
+        if(!res.empty())
+            return res;
+
         auto steamPath = getSteamPath();
         if(!steamPath)
             return res;
@@ -100,10 +104,26 @@ public:
         return res;
     }
 
+    inline static std::optional<std::reference_wrapper<const SteamAccInfo>> GetAccFrom64(const std::string& _id64)
+    {
+        auto& accs = GetAllAccounts();
+        auto res = std::ranges::find_if(accs, [&_id64](const SteamAccInfo& acc){
+            return acc.id64 == _id64;
+        });
+        if(res == accs.end())
+            return std::nullopt;
+        return *res;
+    } 
+
     bool hasGameDataDir(const std::string& gameId) const
     {
         auto gameDataPath = userdataPath / gameId;
         return (std::filesystem::exists(gameDataPath) && std::filesystem::is_directory(gameDataPath));
+    }
+
+    std::filesystem::path getUserGamePath(const std::string& gameId) const 
+    {
+        return userdataPath / gameId;
     }
 
     std::string id64, id3, uname;

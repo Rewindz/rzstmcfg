@@ -56,6 +56,12 @@ enum BorrowStatus
     BORROW_NOGAME
 };
 
+enum ReturnStatus
+{
+    RETURN_OK = 0,
+    RETURN_FAIL,
+};
+
 class Borrower
 {
 public:
@@ -81,8 +87,32 @@ public:
             if(borrower.hasGameDataDir(gameId) && borrowee.hasGameDataDir(gameId)){
                 auto& borrow = borrows.emplace_back(gameId, borrower.id64, borrowee.id64);
                 std::filesystem::path borrowPath = borrowsDir / borrow.borrowId;
-                std::filesystem::create_directory(borrowPath);
-                // TODO: Copy original userdata from the borrower for returning later
+                
+                std::error_code ec;
+                std::filesystem::create_directory(borrowPath, ec);
+                if (ec) {
+                    borrows.pop_back();
+                    return BORROW_FAIL;
+                }
+                
+                auto borrowerGameData = borrower.getUserGamePath(gameId); 
+                std::filesystem::copy(borrowerGameData, borrowPath,
+                    std::filesystem::copy_options::recursive, ec);
+                if (ec) {
+                    borrows.pop_back();
+                    return BORROW_FAIL;
+                }
+
+                // Clean target directory before copy to ensure no foreign files remain
+                std::filesystem::remove_all(borrowerGameData, ec);
+
+                std::filesystem::copy(borrowee.getUserGamePath(gameId), borrowerGameData,
+                    std::filesystem::copy_options::recursive, ec);
+                if (ec) {
+                    borrows.pop_back();
+                    return BORROW_FAIL;
+                }
+                
                 save();
                 return BORROW_OK;
             } else {
@@ -91,6 +121,41 @@ public:
         }
 
         return BORROW_ALR_EXISTS;
+    }
+
+    inline ReturnStatus returnBorrow(const Borrow& borrow)
+    {
+        const auto& opt_borrowerAcc = SteamAccInfo::GetAccFrom64(borrow.borrower);
+        
+        if(!opt_borrowerAcc.has_value())
+            return RETURN_FAIL;
+
+        const auto& borrowerAcc = opt_borrowerAcc.value().get();
+
+        auto userDataPath = borrowerAcc.getUserGamePath(borrow.gameId);
+        auto borrowPath = borrowsDir / borrow.borrowId;
+
+        std::error_code ec;
+        if (std::filesystem::exists(userDataPath)) {
+            std::filesystem::remove_all(userDataPath, ec);
+            if (ec) return RETURN_FAIL;
+        }
+
+        std::filesystem::copy(borrowPath, userDataPath, 
+            std::filesystem::copy_options::recursive, ec);
+        if (ec) return RETURN_FAIL;
+
+        std::filesystem::remove_all(borrowPath, ec);
+        
+        std::erase(borrows, borrow);
+        save();
+        
+        return RETURN_OK;
+    }
+
+    inline const std::vector<Borrow>& getBorrows() const
+    {
+        return borrows;
     }
 
 private:
