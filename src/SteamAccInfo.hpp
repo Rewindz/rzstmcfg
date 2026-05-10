@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <thread>
 #include <chrono>
+#include <atomic>
 
 #include <nlohmann/json.hpp>
 #include <ValveFileVDF/vdf_parser.hpp>
@@ -97,12 +98,14 @@ class SteamAccInfo
 {
 public:
 
-    static std::vector<SteamAccInfo>& GetAllAccounts()
+    static std::vector<SteamAccInfo>& GetAllAccounts(std::atomic<float>* progress = nullptr)
     {
         static std::vector<SteamAccInfo> res;
 
-        if(!res.empty())
+        if(!res.empty()){
+            if(progress) progress->store(1.0f);
             return res;
+        }
 
         auto steamPath = getSteamPath();
         if(!steamPath)
@@ -138,46 +141,57 @@ public:
                 res.push_back(SteamAccInfo(id64, uname));
                 knownAccs[id64] = uname;
             }
-        } 
+        }
 
         auto userdataPath = steamPath.value() / "userdata";
+        std::vector<std::filesystem::path> userDirs;
+        for(const auto& dir : std::filesystem::directory_iterator(userdataPath)){
+            if(dir.is_directory())
+                userDirs.push_back(dir);
+        }
+
+        float totalItems = float(userDirs.size());
+        float currentItem = 0.0f;
+
         httplib::Client cli("https://steamcommunity.com");
         cli.set_keep_alive(true);
-        for(const auto &dir : std::filesystem::directory_iterator(userdataPath)){
-            if(dir.is_directory()){
-                auto id3 = dir.path().filename().string();
-                auto id64 = id3to64(id3);
-                if(!std::any_of(res.begin(), res.end(), [&id64](const SteamAccInfo& acc){
-                    return id64 == acc.id64;
-                })){
-                    if(knownAccs.contains(id64)){
-                        res.push_back(SteamAccInfo(id64, knownAccs.at(id64)));
-                    } else {
-                        auto response = cli.Get(std::format("/profiles/{}", id64));
-                        if(response && response->status == httplib::StatusCode::OK_200){
-                            // <span class="actual_persona_name">uname</span>
-                            std::string html = response->body;
-                            std::string startTag = R"(<span class="actual_persona_name">)";
-                            std::string endTag = "</span>";
-                            bool fail = false;
-                            size_t startPos = html.find(startTag);
-                            if(startPos != std::string::npos){
-                                startPos += startTag.length();
-                                size_t endPos = html.find(endTag, startPos);
-                                if(endPos != std::string::npos){
-                                    std::string uname = html.substr(startPos, endPos - startPos);
-                                    res.push_back(SteamAccInfo(id64, uname));
-                                    knownAccs[id64] = uname;
-                                } else fail = true;
+        for(const auto& dir : userDirs){
+            auto id3 = dir.filename().string();
+            auto id64 = id3to64(id3);
+            if(!std::any_of(res.begin(), res.end(), [&id64](const SteamAccInfo& acc){
+                return id64 == acc.id64;
+            })){
+                if(knownAccs.contains(id64)){
+                    res.push_back(SteamAccInfo(id64, knownAccs.at(id64)));
+                } else {
+                    auto response = cli.Get(std::format("/profiles/{}", id64));
+                    if(response && response->status == httplib::StatusCode::OK_200){
+                        // <span class="actual_persona_name">uname</span>
+                        std::string html = response->body;
+                        std::string startTag = R"(<span class="actual_persona_name">)";
+                        std::string endTag = "</span>";
+                        bool fail = false;
+                        size_t startPos = html.find(startTag);
+                        if(startPos != std::string::npos){
+                            startPos += startTag.length();
+                            size_t endPos = html.find(endTag, startPos);
+                            if(endPos != std::string::npos){
+                                std::string uname = html.substr(startPos, endPos - startPos);
+                                res.push_back(SteamAccInfo(id64, uname));
+                                knownAccs[id64] = uname;
                             } else fail = true;
-                            if(fail)
-                                res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
-                        } else {
+                        } else fail = true;
+                        if(fail)
                             res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
-                        }
-                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                    } else {
+                        res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
                     }
+                    std::this_thread::sleep_for(std::chrono::seconds(5));
                 }
+            }
+            currentItem += 1.0f;
+            if(progress){
+                progress->store(currentItem / totalItems, std::memory_order_relaxed);
             }
         }
 
@@ -195,6 +209,7 @@ public:
             accsFile << root.dump(4);
         }
 
+        if(progress) progress->store(1.0f);
         return res;
     }
 
