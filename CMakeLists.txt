@@ -4,6 +4,8 @@ project(rzstmcfg LANGUAGES CXX)
 
 include(FetchContent)
 
+set(FETCHCONTENT_QUIET OFF)
+
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG v1.92.7
@@ -24,10 +26,15 @@ FetchContent_Declare(httplib
     GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(imgui glfw json httplib)
+FetchContent_Declare(mbedtls
+    GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
+    GIT_TAG v3.6.6
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(imgui glfw json httplib mbedtls)
 
 find_package(OpenGL REQUIRED)
-find_package(OpenSSL REQUIRED)
 
 set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -50,7 +57,7 @@ target_link_libraries(rzstmcfg PRIVATE
  libimgui
  glfw
  OpenGL::GL
- OpenSSL::SSL
+ mbedtls
 )
 target_sources(rzstmcfg PRIVATE
     src/main.cpp

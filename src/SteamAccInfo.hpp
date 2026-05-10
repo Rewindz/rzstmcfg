@@ -15,7 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <ValveFileVDF/vdf_parser.hpp>
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
+#define CPPHTTPLIB_MBEDTLS_SUPPORT
 #include <httplib.h>
 
 #include "Games.hpp"
