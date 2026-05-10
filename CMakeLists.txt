@@ -18,9 +18,16 @@ FetchContent_Declare(json
     URL https://github.com/nlohmann/json/releases/download/v3.12.0/include.zip
 )
 
-FetchContent_MakeAvailable(imgui glfw json)
+FetchContent_Declare(httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.44.0
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(imgui glfw json httplib)
 
 find_package(OpenGL REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -43,6 +50,7 @@ target_link_libraries(rzstmcfg PRIVATE
  libimgui
  glfw
  OpenGL::GL
+ OpenSSL::SSL
 )
 target_sources(rzstmcfg PRIVATE
     src/main.cpp
@@ -50,4 +58,5 @@ target_sources(rzstmcfg PRIVATE
 target_include_directories(rzstmcfg PRIVATE
     libs
     ${json_SOURCE_DIR}/single_include
+    ${httplib_SOURCE_DIR}
 )

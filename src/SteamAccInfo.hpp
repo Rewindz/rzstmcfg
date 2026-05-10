@@ -9,8 +9,14 @@
 #include <iostream>
 #include <format>
 #include <algorithm>
+#include <thread>
+#include <chrono>
 
+#include <nlohmann/json.hpp>
 #include <ValveFileVDF/vdf_parser.hpp>
+
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include <httplib.h>
 
 #include "Games.hpp"
 
@@ -58,6 +64,33 @@ inline std::string id64to3(const std::string& id64)
     return std::to_string(tmp - STEAM_MAGIC_NUMBER);   
 }
 
+/* accs.json
+
+    {
+        accs: [
+            {
+                id64: "nnnnnn",
+                name: "nnnnn"
+            },
+            {
+                id64: "nnnnnnn",
+                name: "nnnnnn"
+            }
+        ]
+    }
+
+*/
+
+struct KnownAccs
+{
+    std::string id64;
+    std::string name;
+
+    KnownAccs() = default;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(KnownAccs, id64, name);
+
 
 
 class SteamAccInfo
@@ -75,6 +108,24 @@ public:
         if(!steamPath)
             return res;
 
+        std::map<std::string, std::string> knownAccs;
+        if(std::filesystem::exists("accs.json")){
+            std::ifstream file("accs.json");
+            if(file.is_open()){
+                try{
+                    nlohmann::json j;
+                    file >> j;
+                    if(j["accs"].is_array()){
+                        for(const KnownAccs acc : j["accs"]){
+                            knownAccs.emplace(acc.id64, acc.name);
+                        }
+                    }
+                } catch (const nlohmann::json::exception& e) {
+                    std::cerr << "Failed to parse accs.json\n" << e.what() << std::endl;
+                }
+            }
+        }
+
         auto loginUsersPath = steamPath.value() / "config" / "loginusers.vdf"; 
 
         std::ifstream loginUsers(loginUsersPath);
@@ -83,11 +134,15 @@ public:
             loginUsers.close();
             for(const auto& [id64, child] : root.childs)
             {
-                res.push_back(SteamAccInfo(id64, child->attribs["PersonaName"]));
+                const auto& uname = child->attribs["PersonaName"];
+                res.push_back(SteamAccInfo(id64, uname));
+                knownAccs[id64] = uname;
             }
         } 
 
         auto userdataPath = steamPath.value() / "userdata";
+        httplib::Client cli("https://steamcommunity.com");
+        cli.set_keep_alive(true);
         for(const auto &dir : std::filesystem::directory_iterator(userdataPath)){
             if(dir.is_directory()){
                 auto id3 = dir.path().filename().string();
@@ -95,10 +150,49 @@ public:
                 if(!std::any_of(res.begin(), res.end(), [&id64](const SteamAccInfo& acc){
                     return id64 == acc.id64;
                 })){
-                    // Probably webscrape for the username when it is unknown (unfortunate, but the API is too much work for this)
-                    res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id64.substr(id64.length() - 4))));
+                    if(knownAccs.contains(id64)){
+                        res.push_back(SteamAccInfo(id64, knownAccs.at(id64)));
+                    } else {
+                        auto response = cli.Get(std::format("/profiles/{}", id64));
+                        if(response && response->status == httplib::StatusCode::OK_200){
+                            // <span class="actual_persona_name">uname</span>
+                            std::string html = response->body;
+                            std::string startTag = R"(<span class="actual_persona_name">)";
+                            std::string endTag = "</span>";
+                            bool fail = false;
+                            size_t startPos = html.find(startTag);
+                            if(startPos != std::string::npos){
+                                startPos += startTag.length();
+                                size_t endPos = html.find(endTag, startPos);
+                                if(endPos != std::string::npos){
+                                    std::string uname = html.substr(startPos, endPos - startPos);
+                                    res.push_back(SteamAccInfo(id64, uname));
+                                    knownAccs[id64] = uname;
+                                } else fail = true;
+                            } else fail = true;
+                            if(fail)
+                                res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
+                        } else {
+                            res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                    }
                 }
             }
+        }
+
+        std::ofstream accsFile("accs.json");
+        if(accsFile.is_open()){
+            nlohmann::json root = nlohmann::json::object();
+            nlohmann::json array = nlohmann::json::array(); 
+            for(const auto& [id64, uname] : knownAccs){
+                nlohmann::json obj = nlohmann::json::object();
+                obj["id64"] = id64;
+                obj["name"] = uname;
+                array.push_back(obj);
+            }
+            root["accs"] = array;
+            accsFile << root.dump(4);
         }
 
         return res;
