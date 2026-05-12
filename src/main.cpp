@@ -157,7 +157,7 @@ int main(void)
                     
                     if(ImGui::BeginTable("To Account Table", 1, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
                     {
-                        ImGui::TableSetupColumn("To Account");
+                        ImGui::TableSetupColumn("To Account (Borrower)");
                         ImGui::TableHeadersRow();
 
                         for(const auto& acc : steamAccs | std::views::filter(gameDirFilter) | std::views::filter(selectedToFilter))
@@ -196,13 +196,13 @@ int main(void)
                                 statusText = "Borrow Failed!";
                                 break;
                             case BORROW_NOGAME:
-                                statusText = "Cannot borrow! Both users do not have the settings for this game!";
+                                statusText = "Cannot borrow!\nBoth users do not have the settings for this game.";
                                 break;
                             case BORROW_ALR_EXISTS:
-                                statusText = "Cannot borrow! A borrow like this already exists! Did you mean to return?";
+                                statusText = "Cannot borrow!\nThe borrower already is borrowing from someone for this game.\nThe config must be returned first.";
                                 break;
                             default:
-                                statusText = "How are you seeing this?";
+                                statusText = "How are you seeing this?\nPlease make an issue.";
                                 break;
                         }
                         ImGui::Text("%s", statusText.c_str());

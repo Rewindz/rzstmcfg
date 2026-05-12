@@ -80,8 +80,8 @@ public:
 
     inline BorrowStatus borrow(const std::string& gameId, const SteamAccInfo& borrower, const SteamAccInfo& borrowee)
     {
-        if(!std::any_of(borrows.begin(), borrows.end(), [&gameId, &borrower, &borrowee](const Borrow& b){
-            return b.checkEqual(gameId, borrower.id64, borrowee.id64);
+        if(!std::any_of(borrows.begin(), borrows.end(), [&gameId, &borrower](const Borrow& b){
+            return (gameId == b.gameId) && (borrower.id64 == b.borrower); 
         })){
             // No current borrows like this exist. Create borrow
             if(borrower.hasGameDataDir(gameId) && borrowee.hasGameDataDir(gameId)){
