@@ -154,7 +154,13 @@ public:
         float currentItem = 0.0f;
 
         httplib::Client cli("https://steamcommunity.com");
-        cli.set_keep_alive(true);
+        cli.set_default_headers({
+            {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"},
+            {"Accept-Language", "en-US,en;q=0.5"}
+        });
+        cli.set_follow_location(true);
+
         for(const auto& dir : userDirs){
             auto id3 = dir.filename().string();
             auto id64 = id3to64(id3);
@@ -164,19 +170,22 @@ public:
                 if(knownAccs.contains(id64)){
                     res.push_back(SteamAccInfo(id64, knownAccs.at(id64)));
                 } else {
-                    auto response = cli.Get(std::format("/profiles/{}", id64));
+                    auto response = cli.Get(std::format("/profiles/{}?xml=1", id64));
                     if(response && response->status == httplib::StatusCode::OK_200){
-                        // <span class="actual_persona_name">uname</span>
-                        std::string html = response->body;
-                        std::string startTag = R"(<span class="actual_persona_name">)";
-                        std::string endTag = "</span>";
+                        std::string body = response->body;
                         bool fail = false;
-                        size_t startPos = html.find(startTag);
+                        std::string startTag = "<steamID>";
+                        std::string endTag = "</steamID>";
+                        size_t startPos = body.find(startTag);
                         if(startPos != std::string::npos){
                             startPos += startTag.length();
-                            size_t endPos = html.find(endTag, startPos);
+                            size_t endPos = body.find(endTag, startPos);
                             if(endPos != std::string::npos){
-                                std::string uname = html.substr(startPos, endPos - startPos);
+                                std::string uname = body.substr(startPos, endPos - startPos);
+                                if(uname.starts_with("<![CDATA[") && uname.ends_with("]]>")){
+                                    uname = uname.substr(9, uname.length() - 12);
+                                }
+                                
                                 res.push_back(SteamAccInfo(id64, uname));
                                 knownAccs[id64] = uname;
                             } else fail = true;
@@ -184,7 +193,7 @@ public:
                         if(fail)
                             res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
                     } else {
-                        res.push_back(SteamAccInfo(id64, std::format("Unknown {}", id3.substr(id3.length() - 4))));
+                        res.push_back(SteamAccInfo(id64, std::format("Unknown {}: {}", id3.substr(id3.length() - 4), int(response.error()))));
                     }
                     std::this_thread::sleep_for(std::chrono::seconds(5));
                 }
